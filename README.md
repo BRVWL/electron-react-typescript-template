@@ -41,7 +41,7 @@ git clone <repository-url>
 
 ```bash
 # Navigate to the project directory
-cd electron-ts-react
+cd electron-react-typescript-template
 
 # Install dependencies
 npm install
