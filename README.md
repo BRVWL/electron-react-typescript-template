@@ -1,11 +1,11 @@
 # Modern Electron Desktop App Template
 
-A comprehensive, production-ready template for building modern desktop applications with Electron, React, TypeScript, and Vite. Features a complete development setup with Apple-style UI components and includes a system monitoring example to demonstrate real-world usage.
+A comprehensive, production-ready template for building modern desktop applications with Electron, React, TypeScript, and Vite. Features a complete development setup with UI components and includes a system monitoring example to demonstrate real-world usage.
 
 ## Template Features
 
 - ⚡ **Modern Stack**: Electron + React + TypeScript + Vite for fast development
-- 🎨 **Apple-style UI**: Beautiful, professional interface with shadcn/ui components
+- 🎨 **UI**: Beautiful, professional interface with shadcn/ui components
 - 🌗 **Dark/Light Mode**: Built-in theme switching with smooth transitions
 - 🔒 **Security First**: Follows Electron security best practices out of the box
 - 🎯 **Type Safety**: Full TypeScript coverage with proper IPC typing
@@ -326,7 +326,7 @@ This pattern scales from simple features (showing a notification) to complex one
 
 The template includes a complete component library:
 
-- Replace the Apple-style header with your own branding
+- Replace the header with your own branding
 - Modify the color scheme in `tailwind.config.js`
 - Add new shadcn/ui components as needed
 - Customize the dark/light mode implementation
@@ -460,7 +460,7 @@ The template uses a carefully crafted design system:
 - **Colors**: Modify `tailwind.config.js` and `src/renderer/index.css`
 - **Components**: All shadcn/ui components can be customized
 - **Themes**: Dark/light mode variables are in CSS custom properties
-- **Layout**: Apple-style spacing and typography are easily adjustable
+- **Layout**: Spacing and typography are easily adjustable
 
 ## Contributing
 
