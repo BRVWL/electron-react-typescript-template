@@ -108,17 +108,6 @@ This template provides a well-organized architecture that separates Electron's m
 ```
 ├── src/
 │   ├── index.ts              # Application entry point
-│   ├── components/           # shadcn/ui component library
-│   │   └── ui/               # Reusable UI components
-│   │       ├── button.tsx    # Button component
-│   │       ├── card.tsx      # Card component
-│   │       ├── badge.tsx     # Badge component
-│   │       ├── progress.tsx  # Progress bar component
-│   │       ├── switch.tsx    # Toggle switch component
-│   │       ├── tooltip.tsx   # Tooltip component
-│   │       └── ...           # Additional UI components
-│   ├── lib/
-│   │   └── utils.ts          # Utility functions (cn, etc.)
 │   ├── main/                 # Electron main process code
 │   │   ├── main.ts           # Main process implementation
 │   │   ├── preload.ts        # Preload script for secure IPC
@@ -128,7 +117,18 @@ This template provides a well-organized architecture that separates Electron's m
 │   ├── renderer/             # React UI code
 │   │   ├── App.tsx           # Main React component with system dashboard
 │   │   ├── renderer.tsx      # React entry point
-│   │   └── index.css         # shadcn/ui styling with CSS variables
+│   │   ├── index.css         # shadcn/ui styling with CSS variables
+│   │   ├── components/       # shadcn/ui component library
+│   │   │   └── ui/           # Reusable UI components
+│   │   │       ├── button.tsx    # Button component
+│   │   │       ├── card.tsx      # Card component
+│   │   │       ├── badge.tsx     # Badge component
+│   │   │       ├── progress.tsx  # Progress bar component
+│   │   │       ├── switch.tsx    # Toggle switch component
+│   │   │       ├── tooltip.tsx   # Tooltip component
+│   │   │       └── ...           # Additional UI components
+│   │   └── lib/
+│   │       └── utils.ts      # Utility functions (cn, etc.)
 │   └── shared/               # Shared code between processes
 │       └── electron.d.ts     # TypeScript definitions for IPC APIs
 ├── components.json           # shadcn/ui configuration

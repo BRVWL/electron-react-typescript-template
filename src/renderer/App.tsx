@@ -1,64 +1,175 @@
-import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Progress } from '@/components/ui/progress';
+import React, {
+  useState,
+  useEffect,
+  use,
+  useOptimistic,
+  useActionState,
+  startTransition,
+} from 'react';
+import { Button } from '@/renderer/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/renderer/components/ui/card';
+import { Badge } from '@/renderer/components/ui/badge';
+import { Switch } from '@/renderer/components/ui/switch';
+import { Progress } from '@/renderer/components/ui/progress';
 import {
   TooltipProvider,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
-} from '@/components/ui/tooltip';
+} from '@/renderer/components/ui/tooltip';
 import type { SystemInfo, MemoryUsage, CpuUsage } from '@/shared/electron.d';
 
+// React 19 async data fetching
+async function fetchSystemInfo() {
+  if (!window.electronAPI) {
+    throw new Error('Electron API not available');
+  }
+
+  const [app, node, chrome, electron, sysInfo] = await Promise.all([
+    window.electronAPI.getAppVersion(),
+    window.electronAPI.getNodeVersion(),
+    window.electronAPI.getChromeVersion(),
+    window.electronAPI.getElectronVersion(),
+    window.electronAPI.getSystemInfo(),
+  ]);
+
+  return { app, node, chrome, electron, sysInfo };
+}
+
+async function fetchSystemMetrics() {
+  if (!window.electronAPI) {
+    throw new Error('Electron API not available');
+  }
+
+  const [memUsage, cpuUsageData] = await Promise.all([
+    window.electronAPI.getMemoryUsage(),
+    window.electronAPI.getCpuUsage(),
+  ]);
+
+  return {
+    memoryPercentage: memUsage.percentage,
+    cpuUsage: cpuUsageData.usage,
+    timestamp: new Date(),
+  };
+}
+
 function App() {
-  const [appVersion, setAppVersion] = useState<string>('Loading...');
-  const [nodeVersion, setNodeVersion] = useState<string>('Loading...');
-  const [chromeVersion, setChromeVersion] = useState<string>('Loading...');
-  const [electronVersion, setElectronVersion] = useState<string>('Loading...');
+  // React 19 state management
+  const [systemInfo, setSystemInfo] = useState<{
+    app: string;
+    node: string;
+    chrome: string;
+    electron: string;
+    sysInfo: SystemInfo;
+  } | null>(null);
+
+  const [isLoadingInfo, setIsLoadingInfo] = useState(true);
   const [darkMode, setDarkMode] = useState<boolean>(false);
-  const [cpuUsage, setCpuUsage] = useState<number>(0);
-  const [memoryUsage, setMemoryUsage] = useState<number>(0);
   const [isOnline, setIsOnline] = useState<boolean>(true);
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
-  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
 
-  useEffect(() => {
-    // Get system information
-    if (window.electronAPI) {
-      Promise.all([
-        window.electronAPI.getAppVersion(),
-        window.electronAPI.getNodeVersion(),
-        window.electronAPI.getChromeVersion(),
-        window.electronAPI.getElectronVersion(),
-        window.electronAPI.getSystemInfo(),
-      ])
-        .then(([app, node, chrome, electron, sysInfo]) => {
-          setAppVersion(app);
-          setNodeVersion(node);
-          setChromeVersion(chrome);
-          setElectronVersion(electron);
-          setSystemInfo(sysInfo);
-        })
-        .catch(console.error);
-    }
+  // Use optimistic updates for system metrics
+  const [systemMetrics, setSystemMetrics] = useState({
+    cpuUsage: 0,
+    memoryUsage: 0,
+    currentTime: new Date(),
+  });
 
-    // Real-time system monitoring
-    const updateSystemMetrics = async () => {
-      if (window.electronAPI) {
+  const [optimisticMetrics, setOptimisticMetrics] = useOptimistic(
+    systemMetrics,
+    (state, newMetrics: Partial<typeof systemMetrics>) => ({
+      ...state,
+      ...newMetrics,
+    })
+  );
+
+  // React 19 action for refreshing data
+  const [refreshState, refreshAction] = useActionState(
+    async (prevState: { isRefreshing: boolean }, formData: FormData) => {
+      const action = formData.get('action') as string;
+
+      if (action === 'refresh-all') {
         try {
-          const [memUsage, cpuUsageData] = await Promise.all([
-            window.electronAPI.getMemoryUsage(),
-            window.electronAPI.getCpuUsage(),
+          // Optimistically update loading state using startTransition
+          startTransition(() => {
+            setOptimisticMetrics({ ...systemMetrics, currentTime: new Date() });
+          });
+
+          const [info, metrics] = await Promise.all([
+            fetchSystemInfo(),
+            fetchSystemMetrics(),
           ]);
 
-          setMemoryUsage(memUsage.percentage);
-          setCpuUsage(cpuUsageData.usage);
-          setCurrentTime(new Date());
+          setSystemInfo(info);
+          setSystemMetrics({
+            cpuUsage: metrics.cpuUsage,
+            memoryUsage: metrics.memoryPercentage,
+            currentTime: metrics.timestamp,
+          });
+
+          return { isRefreshing: false };
         } catch (error) {
-          console.error('Failed to update system metrics:', error);
+          console.error('Failed to refresh data:', error);
+          return { isRefreshing: false };
         }
+      }
+
+      return { isRefreshing: false };
+    },
+    { isRefreshing: false }
+  );
+
+  // Initial data loading with React 19 patterns
+  useEffect(() => {
+    let mounted = true;
+
+    const loadInitialData = async () => {
+      try {
+        const [info, metrics] = await Promise.all([
+          fetchSystemInfo(),
+          fetchSystemMetrics(),
+        ]);
+
+        if (mounted) {
+          setSystemInfo(info);
+          setSystemMetrics({
+            cpuUsage: metrics.cpuUsage,
+            memoryUsage: metrics.memoryPercentage,
+            currentTime: metrics.timestamp,
+          });
+          setIsLoadingInfo(false);
+        }
+      } catch (error) {
+        console.error('Failed to load initial data:', error);
+        if (mounted) {
+          setIsLoadingInfo(false);
+        }
+      }
+    };
+
+    loadInitialData();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Real-time system monitoring with React 19 patterns
+  useEffect(() => {
+    const updateSystemMetrics = async () => {
+      try {
+        const metrics = await fetchSystemMetrics();
+        setSystemMetrics({
+          cpuUsage: metrics.cpuUsage,
+          memoryUsage: metrics.memoryPercentage,
+          currentTime: metrics.timestamp,
+        });
+      } catch (error) {
+        console.error('Failed to update system metrics:', error);
       }
     };
 
@@ -88,6 +199,36 @@ function App() {
     });
   };
 
+  // React 19 action handlers with proper transitions
+  const handleDevToolsAction = () => {
+    startTransition(() => {
+      setOptimisticMetrics({ ...optimisticMetrics, currentTime: new Date() });
+      window.electronAPI?.openDevTools?.();
+    });
+  };
+
+  const handleRefreshAction = () => {
+    startTransition(() => {
+      const formData = new FormData();
+      formData.append('action', 'refresh-all');
+      refreshAction(formData);
+    });
+  };
+
+  const handleLogStateAction = () => {
+    startTransition(() => {
+      const currentState = {
+        darkMode,
+        cpuUsage: optimisticMetrics.cpuUsage,
+        memoryUsage: optimisticMetrics.memoryUsage,
+        isOnline,
+        systemInfo,
+        timestamp: new Date().toISOString(),
+      };
+      console.log('App State (React 19):', currentState);
+    });
+  };
+
   return (
     <TooltipProvider>
       <div
@@ -110,7 +251,7 @@ function App() {
                 {isOnline ? '● Online' : '● Offline'}
               </Badge>
               <span className='text-xs font-mono text-gray-500'>
-                {formatTime(currentTime)}
+                {formatTime(optimisticMetrics.currentTime)}
               </span>
               <Switch
                 checked={darkMode}
@@ -137,16 +278,26 @@ function App() {
                 <div className='space-y-2'>
                   <div className='flex justify-between text-sm'>
                     <span>CPU</span>
-                    <span className='font-mono'>{cpuUsage}%</span>
+                    <span className='font-mono'>
+                      {optimisticMetrics.cpuUsage}%
+                    </span>
                   </div>
-                  <Progress value={cpuUsage} className='h-1.5' />
+                  <Progress
+                    value={optimisticMetrics.cpuUsage}
+                    className='h-1.5'
+                  />
                 </div>
                 <div className='space-y-2'>
                   <div className='flex justify-between text-sm'>
                     <span>Memory</span>
-                    <span className='font-mono'>{memoryUsage}%</span>
+                    <span className='font-mono'>
+                      {optimisticMetrics.memoryUsage}%
+                    </span>
                   </div>
-                  <Progress value={memoryUsage} className='h-1.5' />
+                  <Progress
+                    value={optimisticMetrics.memoryUsage}
+                    className='h-1.5'
+                  />
                 </div>
               </div>
 
@@ -157,7 +308,9 @@ function App() {
                     <div className='text-center p-3 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 hover:bg-gray-200/50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer'>
                       <div className='text-xs font-medium mb-1'>App</div>
                       <div className='text-xs font-mono text-gray-600 dark:text-gray-400'>
-                        v{appVersion}
+                        {isLoadingInfo
+                          ? 'Loading...'
+                          : `v${systemInfo?.app || 'N/A'}`}
                       </div>
                     </div>
                   </TooltipTrigger>
@@ -169,7 +322,9 @@ function App() {
                     <div className='text-center p-3 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 hover:bg-gray-200/50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer'>
                       <div className='text-xs font-medium mb-1'>Node</div>
                       <div className='text-xs font-mono text-gray-600 dark:text-gray-400'>
-                        {nodeVersion}
+                        {isLoadingInfo
+                          ? 'Loading...'
+                          : systemInfo?.node || 'N/A'}
                       </div>
                     </div>
                   </TooltipTrigger>
@@ -181,7 +336,9 @@ function App() {
                     <div className='text-center p-3 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 hover:bg-gray-200/50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer'>
                       <div className='text-xs font-medium mb-1'>Chrome</div>
                       <div className='text-xs font-mono text-gray-600 dark:text-gray-400'>
-                        {chromeVersion}
+                        {isLoadingInfo
+                          ? 'Loading...'
+                          : systemInfo?.chrome || 'N/A'}
                       </div>
                     </div>
                   </TooltipTrigger>
@@ -193,7 +350,9 @@ function App() {
                     <div className='text-center p-3 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 hover:bg-gray-200/50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer'>
                       <div className='text-xs font-medium mb-1'>Electron</div>
                       <div className='text-xs font-mono text-gray-600 dark:text-gray-400'>
-                        {electronVersion}
+                        {isLoadingInfo
+                          ? 'Loading...'
+                          : systemInfo?.electron || 'N/A'}
                       </div>
                     </div>
                   </TooltipTrigger>
@@ -202,26 +361,26 @@ function App() {
               </div>
 
               {/* System information */}
-              {systemInfo && (
+              {systemInfo?.sysInfo && (
                 <div className='mt-4 p-3 rounded-lg bg-gray-50/50 dark:bg-gray-800/50'>
                   <div className='text-xs font-medium mb-2 text-gray-700 dark:text-gray-300'>
                     System Information
                   </div>
                   <div className='grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400'>
-                    <div>Platform: {systemInfo.platform}</div>
-                    <div>Architecture: {systemInfo.arch}</div>
-                    <div>CPU Cores: {systemInfo.cpuCount}</div>
-                    <div>Hostname: {systemInfo.hostname}</div>
+                    <div>Platform: {systemInfo.sysInfo.platform}</div>
+                    <div>Architecture: {systemInfo.sysInfo.arch}</div>
+                    <div>CPU Cores: {systemInfo.sysInfo.cpuCount}</div>
+                    <div>Hostname: {systemInfo.sysInfo.hostname}</div>
                     <div>
                       Total Memory:{' '}
                       {Math.round(
-                        systemInfo.totalMemory / (1024 * 1024 * 1024)
+                        systemInfo.sysInfo.totalMemory / (1024 * 1024 * 1024)
                       )}
                       GB
                     </div>
                     <div>
-                      Uptime: {Math.floor(systemInfo.uptime / 3600)}h{' '}
-                      {Math.floor((systemInfo.uptime % 3600) / 60)}m
+                      Uptime: {Math.floor(systemInfo.sysInfo.uptime / 3600)}h{' '}
+                      {Math.floor((systemInfo.sysInfo.uptime % 3600) / 60)}m
                     </div>
                   </div>
                 </div>
@@ -242,7 +401,7 @@ function App() {
                 <Button
                   variant='outline'
                   className='h-16 flex-col gap-2 border-gray-200/50 dark:border-gray-800/50 hover:bg-gray-100/50 dark:hover:bg-gray-800/50'
-                  onClick={() => window.electronAPI?.openDevTools?.()}
+                  onClick={handleDevToolsAction}
                 >
                   <span className='text-lg'>🔧</span>
                   <span className='text-xs'>DevTools</span>
@@ -251,23 +410,19 @@ function App() {
                 <Button
                   variant='outline'
                   className='h-16 flex-col gap-2 border-gray-200/50 dark:border-gray-800/50 hover:bg-gray-100/50 dark:hover:bg-gray-800/50'
-                  onClick={() => window.location.reload()}
+                  onClick={handleRefreshAction}
+                  disabled={refreshState.isRefreshing}
                 >
                   <span className='text-lg'>🔄</span>
-                  <span className='text-xs'>Refresh</span>
+                  <span className='text-xs'>
+                    {refreshState.isRefreshing ? 'Refreshing...' : 'Refresh'}
+                  </span>
                 </Button>
 
                 <Button
                   variant='outline'
                   className='h-16 flex-col gap-2 border-gray-200/50 dark:border-gray-800/50 hover:bg-gray-100/50 dark:hover:bg-gray-800/50'
-                  onClick={() =>
-                    console.log('App State:', {
-                      darkMode,
-                      cpuUsage,
-                      memoryUsage,
-                      isOnline,
-                    })
-                  }
+                  onClick={handleLogStateAction}
                 >
                   <span className='text-lg'>📊</span>
                   <span className='text-xs'>Log State</span>
@@ -285,12 +440,12 @@ function App() {
                 </div>
                 <h3 className='font-medium'>Electron Studio</h3>
                 <p className='text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto'>
-                  A minimalistic desktop application showcasing modern web
-                  technologies
+                  A modern desktop application showcasing React 19 features with
+                  optimistic updates and async state management
                 </p>
                 <div className='flex justify-center gap-2 pt-2'>
                   <Badge variant='secondary' className='text-xs'>
-                    React
+                    React 19
                   </Badge>
                   <Badge variant='secondary' className='text-xs'>
                     TypeScript
